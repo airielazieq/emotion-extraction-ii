@@ -1,3 +1,4 @@
+import math
 from typing import List, Tuple
 
 import numpy as np
@@ -52,3 +53,52 @@ def faces_to_frames(faces: pd.DataFrame, sampled_frames: List[Tuple[int, float]]
                          "n_faces": int(len(grp)), "no_face": False,
                          "frame_emotion": emo, "frame_max_prob": round(mp, 4)})
     return pd.DataFrame(rows)
+
+
+def label_change_rate(labels_in_order: List[str]) -> float:
+    """Fraction of consecutive (faced) frames whose emotion label changes."""
+    seq = [l for l in labels_in_order if l not in ("no_face",)]
+    if len(seq) < 2:
+        return 0.0
+    changes = sum(1 for a, b in zip(seq[:-1], seq[1:]) if a != b)
+    return changes / (len(seq) - 1)
+
+
+def film_summary(frames: pd.DataFrame, video_id: str,
+                 low_coverage_min_faced: int = 100) -> dict:
+    """One-row film-level summary from a frames table (per-frame emotions)."""
+    n_sampled = int(len(frames))
+    faced = frames[~frames["no_face"]]
+    n_faced = int(len(faced))
+    # proportions over faced frames, excluding 'uncertain' from the emotion mix
+    emo_frames = faced[faced["frame_emotion"].isin(EMOTIONS)]
+    n_emo = int(len(emo_frames))
+    counts = emo_frames["frame_emotion"].value_counts()
+    props = {f"prop_{e}": (float(counts.get(e, 0)) / n_emo if n_emo else 0.0)
+             for e in EMOTIONS}
+    probs = [props[f"prop_{e}"] for e in EMOTIONS]
+    nz = [p for p in probs if p > 0]
+    entropy_bits = float(-sum(p * math.log2(p) for p in nz)) if nz else 0.0
+    dominant = max(EMOTIONS, key=lambda e: props[f"prop_{e}"]) if n_emo else "uncertain"
+    non_neutral = sum(props[f"prop_{e}"] for e in EMOTIONS if e != "neutral")
+    uncertain_rate = (float((faced["frame_emotion"] == "uncertain").sum()) / n_faced
+                      if n_faced else 0.0)
+    out = {
+        "video_id": video_id,
+        "n_frames_sampled": n_sampled,
+        "n_frames_face": n_faced,
+        "face_rate": (n_faced / n_sampled if n_sampled else 0.0),
+        "n_faces": int(faced["n_faces"].sum()),
+        "faces_per_faced_frame": (float(faced["n_faces"].sum()) / n_faced
+                                  if n_faced else 0.0),
+        **props,
+        "dominant_emotion": dominant,
+        "entropy_bits": round(entropy_bits, 4),
+        "norm_entropy": round(entropy_bits / math.log2(len(EMOTIONS)), 4),
+        "non_neutral_share": round(non_neutral, 4),
+        "uncertain_frame_rate": round(uncertain_rate, 4),
+        "label_change_rate": round(
+            label_change_rate(faced["frame_emotion"].tolist()), 4),
+        "low_coverage_flag": n_faced < low_coverage_min_faced,
+    }
+    return out
