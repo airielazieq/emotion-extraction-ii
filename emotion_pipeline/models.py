@@ -42,10 +42,38 @@ def load_face_model(weights_path: str, device: Optional[str] = None):
     return model
 
 
-def load_emotion_model(model_name: str = "enet_b2_8"):
-    ensure_emotion_model(model_name)
+def preferred_ort_providers() -> List[str]:
+    """Pick the best available ONNX Runtime execution provider.
+
+    Prefers a GPU provider when the matching onnxruntime build is installed
+    (DirectML on Windows / ROCm on AMD Linux / CUDA on NVIDIA), else CPU. This
+    lets the AMD Radeon 8060S accelerate inference with no code change once
+    `onnxruntime-directml` (Windows) or `onnxruntime-rocm` (Linux) is installed.
+    """
+    try:
+        import onnxruntime as ort
+        avail = set(ort.get_available_providers())
+    except Exception:
+        return ["CPUExecutionProvider"]
+    for p in ("DmlExecutionProvider", "ROCMExecutionProvider", "CUDAExecutionProvider"):
+        if p in avail:
+            return [p, "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
+def load_emotion_model(model_name: str = "enet_b0_8_best_vgaf",
+                       providers: Optional[List[str]] = None):
+    """Load the hsemotion ONNX recognizer, using a GPU execution provider when
+    available. `providers` overrides the auto-selection."""
+    path = ensure_emotion_model(model_name)
     from hsemotion_onnx.facial_emotions import HSEmotionRecognizer
-    return HSEmotionRecognizer(model_name=model_name)
+    rec = HSEmotionRecognizer(model_name=model_name)
+    providers = providers or preferred_ort_providers()
+    # hsemotion hardcodes CPU; rebuild the session if a GPU provider is on offer.
+    if providers != ["CPUExecutionProvider"]:
+        import onnxruntime as ort
+        rec.ort_session = ort.InferenceSession(str(path), providers=providers)
+    return rec
 
 
 def emotion_class_order(recognizer) -> List[str]:

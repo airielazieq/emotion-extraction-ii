@@ -37,6 +37,9 @@ def main(argv=None):
     ap.add_argument("--videos", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--weights", default="models/yolov12m-face.pt")
+    ap.add_argument("--device", default=None,
+                    help="detector device for Ultralytics: cpu, cuda, 0, ... "
+                         "(default: auto-select)")
     ap.add_argument("--skip-existing", action="store_true", default=True)
     args = ap.parse_args(argv)
 
@@ -46,8 +49,10 @@ def main(argv=None):
     from emotion_pipeline.models import (
         classify_crop, detect_faces, load_emotion_model, load_face_model,
     )
-    face_model = load_face_model(args.weights)
+    face_model = load_face_model(args.weights, device=args.device)
     emo = load_emotion_model(cfg.emotion_model)
+    print(f"[setup] detector device={args.device or 'auto'}, "
+          f"emotion_model={cfg.emotion_model}")
 
     manifest_rows = []
     videos = discover_videos(args.videos)
