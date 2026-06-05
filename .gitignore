@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Large binary inputs (kept out of git)
+videos/
+models/
+*.pt
+*.onnx
+
+# Pipeline outputs
+out/
+*.parquet
