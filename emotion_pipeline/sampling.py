@@ -56,3 +56,48 @@ def read_frames_at_timestamps(
         frames.append((idx, round(t, 4), frame))
     cap.release()
     return frames, float(src_fps), float(duration_s), width, height
+
+
+def read_frames_grab(
+    video_path: Path, fps_target: int
+) -> Tuple[List[Tuple[int, float, np.ndarray]], float, float, int, int]:
+    """Fast sampler: one sequential pass, decoding ONLY the frames we keep.
+
+    Walks the stream with cheap ``grab()`` calls and ``retrieve()``s (decodes)
+    only at the target frame indices, instead of seeking+decoding for every
+    timestamp. Far faster, but it samples by FRAME INDEX, so it assumes the
+    video is constant-frame-rate. For variable-frame-rate input the frame<->time
+    mapping drifts -- use ``read_frames_at_timestamps`` there. Same return shape.
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_f = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    duration_s = (total_f / src_fps) if src_fps else 0.0
+
+    timestamps = target_timestamps(duration_s, fps_target)
+    # Map each unique target frame index to its (earliest) timestamp.
+    idx_to_t: dict = {}
+    for t in timestamps:
+        idx_to_t.setdefault(_nearest_index(t, src_fps), round(t, 4))
+    targets = iter(sorted(idx_to_t))
+    next_target = next(targets, None)
+
+    frames: List[Tuple[int, float, np.ndarray]] = []
+    pos = 0
+    while next_target is not None:
+        if pos == next_target:
+            ok, frame = cap.read()  # grab + decode
+            if ok and frame is not None:
+                frames.append((pos, idx_to_t[next_target], frame))
+            pos += 1
+            next_target = next(targets, None)
+        else:
+            if not cap.grab():      # advance, no decode
+                break
+            pos += 1
+    cap.release()
+    return frames, float(src_fps), float(duration_s), width, height

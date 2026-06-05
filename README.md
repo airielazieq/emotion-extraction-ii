@@ -92,11 +92,38 @@ collapses all faces in a frame to one emotion (`mean_softmax`), so every half-se
 film counts once — comparable across films regardless of how crowded each is. The
 per-frame table is the recommended modeling unit.
 
-## Performance note (for the full 677-film run)
-Sampling seeks by timestamp (`cv2 POS_MSEC`) for VFR-safety and holds a film's sampled
-frames in memory. On the 128 GB target machine memory is a non-issue; throughput is
-bound by detector+classifier inference per frame. The run is **resumable** — rerun the
-same command and it skips any video whose `_faces.parquet` already exists.
+## Scaling the full 677-film run
+The default path (`--sampler timestamp`, single process) is the validated, VFR-safe
+one but is **seek-bound** — ~80% of its time is spent seeking/decoding, not on the
+models. Two opt-in flags make a powerful machine pay off (the default path is
+unchanged if you don't use them):
+
+**1. Fast sampler — `--sampler grab`.** One sequential pass that decodes *only* the
+frames it keeps, instead of seeking+decoding per timestamp. Much faster, but it samples
+by frame index, so **only use it on constant-frame-rate video** (these films are CFR).
+Variable-frame-rate input should stay on `--sampler timestamp`.
+
+**2. Parallel sharding — `--shards N --shard-id K`.** Each film is independent, so run N
+workers over a round-robin partition (no overlap, no write races; each writes its own
+`manifest_shardKK.csv`). Cap threads per worker with `--threads` so they don't
+oversubscribe the cores.
+
+```bash
+# Example: 12 parallel workers on a 16-core machine, fast sampler, ~1 core each.
+# (PowerShell: use a for loop; bash shown here.)
+for K in $(seq 0 11); do
+  python -m scripts.run_extract --videos videos --out out/faces \
+         --sampler grab --shards 12 --shard-id $K --threads 1 &
+done
+wait
+python -m scripts.run_aggregate --faces out/faces --out out
+```
+
+GPU note: a GPU helps only the ~20% inference slice and, on a batch-of-one classifier,
+may not beat CPU; on AMD the DirectML/ROCm setup is finicky. Treat GPU as an
+experimental extra — the reliable wins are the fast sampler + CPU parallelism above.
+
+The run is **resumable**: rerun and it skips any video whose `_faces.parquet` exists.
 
 ## Tests
 ```bash

@@ -62,17 +62,25 @@ def preferred_ort_providers() -> List[str]:
 
 
 def load_emotion_model(model_name: str = "enet_b0_8_best_vgaf",
-                       providers: Optional[List[str]] = None):
+                       providers: Optional[List[str]] = None,
+                       intra_op_threads: Optional[int] = None):
     """Load the hsemotion ONNX recognizer, using a GPU execution provider when
-    available. `providers` overrides the auto-selection."""
+    available. `providers` overrides the auto-selection; `intra_op_threads`
+    caps ONNX Runtime's per-call threads (set it when running parallel workers
+    so they don't oversubscribe the CPU)."""
     path = ensure_emotion_model(model_name)
     from hsemotion_onnx.facial_emotions import HSEmotionRecognizer
     rec = HSEmotionRecognizer(model_name=model_name)
     providers = providers or preferred_ort_providers()
-    # hsemotion hardcodes CPU; rebuild the session if a GPU provider is on offer.
-    if providers != ["CPUExecutionProvider"]:
+    # hsemotion hardcodes a default CPU session; rebuild it if we need a GPU
+    # provider or an explicit thread cap.
+    if providers != ["CPUExecutionProvider"] or intra_op_threads is not None:
         import onnxruntime as ort
-        rec.ort_session = ort.InferenceSession(str(path), providers=providers)
+        so = ort.SessionOptions()
+        if intra_op_threads is not None:
+            so.intra_op_num_threads = int(intra_op_threads)
+        rec.ort_session = ort.InferenceSession(
+            str(path), sess_options=so, providers=providers)
     return rec
 
 
