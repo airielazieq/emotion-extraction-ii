@@ -1,4 +1,7 @@
-from typing import Dict, List, Tuple
+import os
+import urllib.request
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -8,13 +11,39 @@ from emotion_pipeline.detection import clamp_box
 
 Box = Tuple[int, int, int, int]
 
+_HSEMOTION_BASE = ("https://github.com/HSE-asavchenko/face-emotion-recognition/"
+                   "raw/main/models/affectnet_emotions/onnx/")
 
-def load_face_model(weights_path: str):
+
+def ensure_emotion_model(model_name: str = "enet_b2_8") -> Path:
+    """Pre-download the hsemotion ONNX weights into ~/.hsemotion if missing.
+
+    Works around a bug in hsemotion-onnx whose own downloader calls
+    ``urllib.request`` without importing it (fails on Python 3.13). We fetch the
+    file ourselves so a fresh checkout runs with no manual setup.
+    """
+    cache_dir = Path(os.path.expanduser("~")) / ".hsemotion"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    fpath = cache_dir / f"{model_name}.onnx"
+    if not fpath.is_file():
+        url = f"{_HSEMOTION_BASE}{model_name}.onnx"
+        print(f"[models] downloading emotion model {model_name} -> {fpath}")
+        urllib.request.urlretrieve(url, fpath)
+    return fpath
+
+
+def load_face_model(weights_path: str, device: Optional[str] = None):
+    """Load the YOLO face detector. ``device`` is passed through to Ultralytics
+    (e.g. 'cpu', 'cuda', 0); None lets Ultralytics auto-select."""
     from ultralytics import YOLO
-    return YOLO(weights_path)
+    model = YOLO(weights_path)
+    if device is not None:
+        model.to(device)
+    return model
 
 
 def load_emotion_model(model_name: str = "enet_b2_8"):
+    ensure_emotion_model(model_name)
     from hsemotion_onnx.facial_emotions import HSEmotionRecognizer
     return HSEmotionRecognizer(model_name=model_name)
 

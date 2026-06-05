@@ -21,7 +21,8 @@ def _write_faces(out: Path, vid: str):
 
 def test_aggregate_one_produces_frames_and_summary(tmp_path: Path):
     _write_faces(tmp_path, "vid1")
-    frames, summary = aggregate_one(tmp_path, "vid1", method="mean_softmax")
+    faces, frames, summary = aggregate_one(tmp_path, "vid1", method="mean_softmax")
+    assert len(faces) == 3                    # three face records written
     assert len(frames) == 3                  # incl. the no-face frame 30
     assert summary["n_frames_face"] == 2
     assert summary["dominant_emotion"] in ("happiness", "sadness")

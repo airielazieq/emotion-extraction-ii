@@ -7,6 +7,28 @@ import pandas as pd
 from emotion_pipeline import EMOTIONS
 
 _PCOLS = [f"p_{e}" for e in EMOTIONS]
+# Count-table categories: the 8 emotions plus the abstain bucket.
+COUNT_CATEGORIES = EMOTIONS + ["uncertain"]
+
+
+def emotion_counts_face(faces: pd.DataFrame, video_id: str) -> dict:
+    """Per-film row of raw per-FACE label counts (incl. 'uncertain')."""
+    vc = faces["label"].value_counts() if len(faces) else {}
+    row = {"video_id": video_id}
+    row.update({f"n_{c}": int(vc.get(c, 0)) for c in COUNT_CATEGORIES})
+    row["n_faces_total"] = int(len(faces))
+    return row
+
+
+def emotion_counts_frame(frames: pd.DataFrame, video_id: str) -> dict:
+    """Per-film row of per-FRAME emotion counts (no_face broken out separately)."""
+    faced = frames[~frames["no_face"]]
+    vc = faced["frame_emotion"].value_counts() if len(faced) else {}
+    row = {"video_id": video_id}
+    row.update({f"n_{c}": int(vc.get(c, 0)) for c in COUNT_CATEGORIES})
+    row["n_no_face"] = int(frames["no_face"].sum())
+    row["n_frames_total"] = int(len(frames))
+    return row
 
 
 def frame_emotion_from_faces(faces_in_frame: pd.DataFrame,

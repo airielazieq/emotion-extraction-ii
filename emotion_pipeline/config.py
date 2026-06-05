@@ -13,4 +13,7 @@ class PipelineConfig:
     abstain_tau: float = 0.40          # below this max-prob -> "uncertain"
     frame_emotion_method: str = "mean_softmax"  # or "dominant_largest" / "majority"
     yolo_weights: str = "yolov12m-face.pt"
-    emotion_model: str = "enet_b2_8"
+    # enet_b0_8_best_vgaf is trained on in-the-wild video and is far better
+    # calibrated on candid film footage than the static-image enet_b2_8
+    # (committed-label rate 54% vs 12% at tau=0.40 on a 400-face A/B).
+    emotion_model: str = "enet_b0_8_best_vgaf"
