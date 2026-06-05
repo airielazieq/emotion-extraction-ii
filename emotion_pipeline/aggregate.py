@@ -94,7 +94,7 @@ def film_summary(frames: pd.DataFrame, video_id: str,
         **props,
         "dominant_emotion": dominant,
         "entropy_bits": round(entropy_bits, 4),
-        "norm_entropy": round(entropy_bits / math.log2(len(EMOTIONS)), 4),
+        "norm_entropy": round(entropy_bits / math.log2(len(EMOTIONS)), 6),
         "non_neutral_share": round(non_neutral, 4),
         "uncertain_frame_rate": round(uncertain_rate, 4),
         "label_change_rate": round(
